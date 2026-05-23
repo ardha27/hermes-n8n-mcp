@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hermes-n8n-mcp"
+version = "0.1.0"
+description = "Local stdio MCP bridge for managing n8n from Hermes Agent"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "CyberSamuraiX" }]
+dependencies = [
+  "mcp>=1.0.0",
+  "httpx>=0.27.0",
+  "python-dotenv>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/CyberSamuraiX/hermes-n8n-mcp"
+Repository = "https://github.com/CyberSamuraiX/hermes-n8n-mcp"

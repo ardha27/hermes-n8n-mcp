@@ -1,0 +1,12 @@
+mcp_servers:
+  n8n:
+    command: "/absolute/path/to/hermes-n8n-mcp/.venv/bin/python"
+    args:
+      - "/absolute/path/to/hermes-n8n-mcp/server.py"
+    env:
+      # Optional. If omitted, the server also checks ~/.config/n8n-mcp/env and ./.env.
+      N8N_MCP_ENV: "/absolute/path/to/root-or-user-owned/n8n-mcp/env"
+    timeout: 120
+    connect_timeout: 30
+    sampling:
+      enabled: false
