@@ -253,11 +253,8 @@ def create_workflow(
     """Create a new n8n workflow. `nodes` and `connections` must follow n8n workflow JSON shape."""
     if not name.strip():
         return {"ok": False, "error": "name is required"}
-    payload: dict[str, Any] = {"name": name.strip(), "nodes": nodes, "active": bool(active)}
-    if connections is not None:
-        payload["connections"] = connections
-    if tags is not None:
-        payload["tags"] = tags
+    payload: dict[str, Any] = {"name": name.strip(), "nodes": nodes, "settings": {}}
+    payload["connections"] = connections if connections is not None else {}
     return _request("POST", "/api/v1/workflows", json=payload)
 
 
@@ -271,7 +268,16 @@ def update_workflow(
     tags: list[str] | None = None,
 ) -> dict[str, Any]:
     """Update an existing workflow by ID. Only provided fields are patched."""
-    payload: dict[str, Any] = {}
+    source = get_workflow(workflow_id)
+    if not source.get("ok"):
+        return source
+    wf = source.get("data", {})
+    payload: dict[str, Any] = {
+        "name": wf.get("name"),
+        "nodes": wf.get("nodes", []),
+        "settings": wf.get("settings", {}),
+        "connections": wf.get("connections", {}),
+    }
     if name is not None:
         payload["name"] = name
     if nodes is not None:
@@ -425,7 +431,8 @@ def update_node(
         updated.append(node)
     if not found:
         return {"ok": False, "error": f"node '{node_name}' not found in workflow '{workflow_id}'"}
-    return _request("PUT", f"/api/v1/workflows/{workflow_id}", json={"nodes": updated})
+    payload = {"name": wf.get("name"), "nodes": updated, "settings": wf.get("settings", {}), "connections": wf.get("connections", {})}
+    return _request("PUT", f"/api/v1/workflows/{workflow_id}", json=payload)
 
 
 @mcp.tool()
@@ -448,11 +455,12 @@ def add_node(
         "type": node_type,
         "name": name,
         "typeVersion": 1,
-        "position": position or {"x": 240, "y": 180},
+        "position": [position.get("x", 240), position.get("y", 180)] if position else [240, 180],
         "parameters": parameters or {},
     }
     nodes.append(node)
-    return _request("PUT", f"/api/v1/workflows/{workflow_id}", json={"nodes": nodes})
+    payload = {"name": wf.get("name"), "nodes": nodes, "settings": wf.get("settings", {}), "connections": wf.get("connections", {})}
+    return _request("PUT", f"/api/v1/workflows/{workflow_id}", json=payload)
 
 
 @mcp.tool()
@@ -467,7 +475,8 @@ def delete_node(workflow_id: str, node_name: str) -> dict[str, Any]:
     nodes = [node for node in (wf.get("nodes") or []) if node.get("name") != node_name]
     if len(nodes) == len(wf.get("nodes") or []):
         return {"ok": False, "error": f"node '{node_name}' not found in workflow '{workflow_id}'"}
-    return _request("PUT", f"/api/v1/workflows/{workflow_id}", json={"nodes": nodes})
+    payload = {"name": wf.get("name"), "nodes": nodes, "settings": wf.get("settings", {}), "connections": wf.get("connections", {})}
+    return _request("PUT", f"/api/v1/workflows/{workflow_id}", json=payload)
 
 
 @mcp.tool()
