@@ -242,5 +242,70 @@ def container_logs(lines: int = 100) -> dict[str, Any]:
         return {"ok": False, "error": str(e)}
 
 
+@mcp.tool()
+def create_workflow(
+    name: str,
+    nodes: list[dict[str, Any]],
+    connections: dict[str, Any] | None = None,
+    active: bool = False,
+    tags: list[str] | None = None,
+) -> dict[str, Any]:
+    """Create a new n8n workflow. `nodes` and `connections` must follow n8n workflow JSON shape."""
+    if not name.strip():
+        return {"ok": False, "error": "name is required"}
+    payload: dict[str, Any] = {"name": name.strip(), "nodes": nodes, "active": bool(active)}
+    if connections is not None:
+        payload["connections"] = connections
+    if tags is not None:
+        payload["tags"] = tags
+    return _request("POST", "/api/v1/workflows", json=payload)
+
+
+@mcp.tool()
+def update_workflow(
+    workflow_id: str,
+    name: str | None = None,
+    nodes: list[dict[str, Any]] | None = None,
+    connections: dict[str, Any] | None = None,
+    active: bool | None = None,
+    tags: list[str] | None = None,
+) -> dict[str, Any]:
+    """Update an existing workflow by ID. Only provided fields are patched."""
+    payload: dict[str, Any] = {}
+    if name is not None:
+        payload["name"] = name
+    if nodes is not None:
+        payload["nodes"] = nodes
+    if connections is not None:
+        payload["connections"] = connections
+    if active is not None:
+        payload["active"] = bool(active)
+    if tags is not None:
+        payload["tags"] = tags
+    if not payload:
+        return {"ok": False, "error": "No fields provided to update"}
+    return _request("PUT", f"/api/v1/workflows/{workflow_id}", json=payload)
+
+
+@mcp.tool()
+def trigger_execution(workflow_id: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Manually trigger an execution for an existing workflow.
+    `data` is optional input payload for the workflow run."""
+    if not workflow_id.strip():
+        return {"ok": False, "error": "workflow_id is required"}
+    payload: dict[str, Any] = {}
+    if data is not None:
+        payload["data"] = data
+    return _request("POST", f"/api/v1/workflows/{workflow_id}/executions", json=payload)
+
+
+@mcp.tool()
+def delete_workflow(workflow_id: str) -> dict[str, Any]:
+    """Delete a workflow by ID. This is destructive."""
+    if not workflow_id.strip():
+        return {"ok": False, "error": "workflow_id is required"}
+    return _request("DELETE", f"/api/v1/workflows/{workflow_id}")
+
+
 if __name__ == "__main__":
     mcp.run()

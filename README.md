@@ -18,6 +18,10 @@ Exposes these MCP tools:
 - `export_workflow` — fetch redacted workflow JSON for backup/review
 - `activate_workflow` — activate a workflow by ID
 - `deactivate_workflow` — deactivate a workflow by ID
+- `create_workflow` — create a new workflow from JSON definition
+- `update_workflow` — patch an existing workflow by ID
+- `trigger_execution` — manually trigger a workflow run
+- `delete_workflow` — delete a workflow by ID
 - `container_logs` — optional Docker logs with line-level redaction
 
 ## Security posture
