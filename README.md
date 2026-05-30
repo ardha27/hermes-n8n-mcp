@@ -22,6 +22,22 @@ Exposes these MCP tools:
 - `update_workflow` — patch an existing workflow by ID
 - `trigger_execution` — manually trigger a workflow run
 - `delete_workflow` — delete a workflow by ID
+- `clone_workflow` — duplicate an existing workflow by ID
+- `list_tags` — list workflow tags with counts
+- `get_workflow_stats` — execution stats for a workflow (success/error/waiting/running counts)
+- `list_active_executions` — currently running executions
+- `cancel_execution` — cancel a running execution
+- `retry_execution` — retry a failed execution
+- `get_execution_logs` — execution details including node run logs
+- `update_node` — update one node's parameters in an existing workflow
+- `add_node` — add a node to an existing workflow
+- `delete_node` — remove a node from an existing workflow
+- `list_credentials` — list credential types and IDs (no secret values)
+- `get_n8n_info` — instance info, version, and environment details
+- `get_queue_stats` — queue and runner/execution job statistics
+- `batch_delete_executions` — delete old executions up to a limit
+- `create_webhook` — create a webhook path on a workflow
+- `delete_webhook` — remove a webhook path from a workflow
 - `container_logs` — optional Docker logs with line-level redaction
 
 ## Security posture
@@ -117,6 +133,19 @@ Or from shell:
 ```bash
 hermes mcp test n8n
 ```
+
+## Using `n8n-skills` with this server
+
+This server implements the operational layer. For higher-level workflow authoring, reuse
+[`czlonkowski/n8n-skills`](https://github.com/czlonkowski/n8n-skills) as Claude skills alongside
+this MCP server. That repo gives agent-ready knowledge for:
+
+- n8n expression syntax
+- Code node JavaScript / Python patterns
+- template and workflow patterns
+- node configuration and validation behavior
+
+Install the skills from that repo into `~/.claude/skills/` or your Claude skills directory.
 
 ## Smoke test outside Hermes
 
