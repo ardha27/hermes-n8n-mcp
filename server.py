@@ -307,5 +307,245 @@ def delete_workflow(workflow_id: str) -> dict[str, Any]:
     return _request("DELETE", f"/api/v1/workflows/{workflow_id}")
 
 
+@mcp.tool()
+def clone_workflow(workflow_id: str, name: str | None = None) -> dict[str, Any]:
+    """Clone an existing workflow by ID. Returns the newly created workflow."""
+    source = get_workflow(workflow_id)
+    if not source.get("ok"):
+        return source
+    wf = source.get("data", {})
+    payload = {
+        "name": name or f"{wf.get('name', 'workflow')} (copy)",
+        "nodes": wf.get("nodes", []),
+        "connections": wf.get("connections", {}),
+        "active": False,
+        "tags": wf.get("tags"),
+    }
+    return _request("POST", "/api/v1/workflows", json=payload)
+
+
+@mcp.tool()
+def list_tags() -> dict[str, Any]:
+    """List all workflow tags known in this instance."""
+    res = list_workflows(limit=250)
+    if not res.get("ok"):
+        return res
+    tags: dict[str, int] = {}
+    for wf in _rows_from_list_response(res):
+        for tag in (wf.get("tags") or []):
+            tags[tag] = tags.get(tag, 0) + 1
+    return {"ok": True, "data": tags, "count": len(tags)}
+
+
+@mcp.tool()
+def get_workflow_stats(workflow_id: str) -> dict[str, Any]:
+    """Return execution statistics for one workflow."""
+    res = list_executions(workflow_id=workflow_id, limit=100)
+    if not res.get("ok"):
+        return res
+    rows = _rows_from_list_response(res)
+    stats = {
+        "total": len(rows),
+        "success": 0,
+        "error": 0,
+        "waiting": 0,
+        "running": 0,
+        "avg_wait_ms": 0.0,
+    }
+    wait_total = 0
+    wait_count = 0
+    for row in rows:
+        status = str(row.get("finished") or row.get("status") or "").lower()
+        if status == "success" or status == "succeeded":
+            stats["success"] += 1
+        elif status in {"error", "failed", "crashed"}:
+            stats["error"] += 1
+        elif status in {"waiting", "new"}:
+            stats["waiting"] += 1
+        elif status in {"running", "executing"}:
+            stats["running"] += 1
+        w = row.get("waitTill") or row.get("waitUntil")
+        if isinstance(w, (int, float)) and w > 0:
+            wait_total += float(w)
+            wait_count += 1
+    if wait_count:
+        stats["avg_wait_ms"] = wait_total / wait_count
+    return {"ok": True, "workflow_id": workflow_id, "stats": stats}
+
+
+@mcp.tool()
+def list_active_executions(limit: int = 50) -> dict[str, Any]:
+    """List executions currently in a running/active state."""
+    return list_executions(status="running", limit=limit)
+
+
+@mcp.tool()
+def cancel_execution(execution_id: str) -> dict[str, Any]:
+    """Cancel a running execution by ID."""
+    if not execution_id.strip():
+        return {"ok": False, "error": "execution_id is required"}
+    return _request("POST", f"/api/v1/executions/{execution_id}/cancel")
+
+
+@mcp.tool()
+def retry_execution(execution_id: str) -> dict[str, Any]:
+    """Retry a failed execution by re-running it."""
+    if not execution_id.strip():
+        return {"ok": False, "error": "execution_id is required"}
+    return _request("POST", f"/api/v1/executions/{execution_id}/retry")
+
+
+@mcp.tool()
+def get_execution_logs(execution_id: str) -> dict[str, Any]:
+    """Get execution details including node run logs for debugging."""
+    return get_execution(execution_id=execution_id, include_data=False)
+
+
+@mcp.tool()
+def update_node(
+    workflow_id: str,
+    node_name: str,
+    parameters: dict[str, Any],
+) -> dict[str, Any]:
+    """Update only one node's parameters inside an existing workflow."""
+    if not workflow_id.strip() or not node_name.strip():
+        return {"ok": False, "error": "workflow_id and node_name are required"}
+    source = get_workflow(workflow_id)
+    if not source.get("ok"):
+        return source
+    wf = source.get("data", {})
+    nodes = wf.get("nodes") or []
+    updated = []
+    found = False
+    for node in nodes:
+        if node.get("name") == node_name:
+            node = dict(node)
+            node["parameters"] = {**(node.get("parameters") or {}), **parameters}
+            found = True
+        updated.append(node)
+    if not found:
+        return {"ok": False, "error": f"node '{node_name}' not found in workflow '{workflow_id}'"}
+    return _request("PUT", f"/api/v1/workflows/{workflow_id}", json={"nodes": updated})
+
+
+@mcp.tool()
+def add_node(
+    workflow_id: str,
+    node_type: str,
+    name: str,
+    parameters: dict[str, Any] | None = None,
+    position: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    """Add one node to an existing workflow."""
+    if not workflow_id.strip() or not node_type.strip() or not name.strip():
+        return {"ok": False, "error": "workflow_id, node_type, and name are required"}
+    source = get_workflow(workflow_id)
+    if not source.get("ok"):
+        return source
+    wf = source.get("data", {})
+    nodes = wf.get("nodes") or []
+    node = {
+        "type": node_type,
+        "name": name,
+        "typeVersion": 1,
+        "position": position or {"x": 240, "y": 180},
+        "parameters": parameters or {},
+    }
+    nodes.append(node)
+    return _request("PUT", f"/api/v1/workflows/{workflow_id}", json={"nodes": nodes})
+
+
+@mcp.tool()
+def delete_node(workflow_id: str, node_name: str) -> dict[str, Any]:
+    """Delete one node from an existing workflow by node name."""
+    if not workflow_id.strip() or not node_name.strip():
+        return {"ok": False, "error": "workflow_id and node_name are required"}
+    source = get_workflow(workflow_id)
+    if not source.get("ok"):
+        return source
+    wf = source.get("data", {})
+    nodes = [node for node in (wf.get("nodes") or []) if node.get("name") != node_name]
+    if len(nodes) == len(wf.get("nodes") or []):
+        return {"ok": False, "error": f"node '{node_name}' not found in workflow '{workflow_id}'"}
+    return _request("PUT", f"/api/v1/workflows/{workflow_id}", json={"nodes": nodes})
+
+
+@mcp.tool()
+def list_credentials(limit: int = 100) -> dict[str, Any]:
+    """List credential types and IDs available in n8n (no secret values returned)."""
+    return _request("GET", "/api/v1/credentials", params={"limit": max(1, min(int(limit), 250))})
+
+
+@mcp.tool()
+def get_n8n_info() -> dict[str, Any]:
+    """Return n8n instance info, including version and environment details."""
+    info = _request("GET", "/api/v1/info")
+    if not info.get("ok"):
+        return info
+    return _request("GET", "/api/v1/info")
+
+
+@mcp.tool()
+def get_queue_stats() -> dict[str, Any]:
+    """Return queue and runner/execution job statistics if available."""
+    return _request("GET", "/api/v1/queue/stats")
+
+
+@mcp.tool()
+def batch_delete_executions(older_than_days: int = 7, limit: int = 200) -> dict[str, Any]:
+    """Delete execution history older than N days, up to a limit."""
+    res = list_executions(status="error", limit=limit)
+    if not res.get("ok"):
+        return res
+    deleted = 0
+    failed: list[str] = []
+    for row in _rows_from_list_response(res):
+        started = row.get("startedAt") or row.get("startedAt") or row.get("started")
+        started_at = None
+        if isinstance(started, str):
+            try:
+                started_at = __import__("datetime").datetime.fromisoformat(started.replace("Z", "+00:00"))
+            except Exception:
+                started_at = None
+        if started_at is None:
+            continue
+        age = (__import__("datetime").datetime.now(__import__("datetime").timezone.utc) - started_at).days
+        if age >= max(1, int(older_than_days)):
+            execution_id = str(row.get("id") or row.get("executionId") or "")
+            if not execution_id:
+                continue
+            d = _request("DELETE", f"/api/v1/executions/{execution_id}")
+            if d.get("ok"):
+                deleted += 1
+            else:
+                failed.append(execution_id)
+    return {"ok": True, "deleted": deleted, "failed": failed}
+
+
+@mcp.tool()
+def create_webhook(workflow_id: str, path: str, method: str = "GET") -> dict[str, Any]:
+    """Create a webhook path on a workflow. Returns the public webhook URL."""
+    if not workflow_id.strip() or not path.strip():
+        return {"ok": False, "error": "workflow_id and path are required"}
+    method = method.strip().upper()
+    return _request(
+        "POST",
+        "/api/v1/webhooks",
+        json={"workflowId": workflow_id, "path": path.strip().strip("/"), "method": method, "httpMethod": method},
+    )
+
+
+@mcp.tool()
+def delete_webhook(workflow_id: str, path: str) -> dict[str, Any]:
+    """Delete a webhook path from a workflow."""
+    if not workflow_id.strip() or not path.strip():
+        return {"ok": False, "error": "workflow_id and path are required"}
+    return _request(
+        "DELETE",
+        "/api/v1/webhooks",
+        json={"workflowId": workflow_id, "path": path.strip().strip("/")},
+    )
+
+
 if __name__ == "__main__":
     mcp.run()
